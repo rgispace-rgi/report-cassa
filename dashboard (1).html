@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Report Cassa</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f0f0f;--surface:#1a1a1a;--border:#2a2a2a;
+  --text:#e8e8e8;--muted:#a8a8a8;
+  --gbg:#0d2b1a;--g:#4ade80;--gv:#86efac;
+  --rbg:#2b0d0d;--r:#f87171;
+  --bbg:#0f172a;--b:#93c5fd;--bb:#1e3a5f;
+  --gold:#f59e0b;
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'IBM Plex Sans',sans-serif;
+  --tbl-size:17px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden}
+
+/* TOP: fixed in alto */
+#top{
+  position:fixed;top:0;left:0;right:0;
+  z-index:999;
+  background:var(--bg);
+  border-bottom:1px solid var(--border);
+  padding:14px 20px 12px;
+}
+.hrow{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+#top h1{font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-.5px}
+#sync-label{font-size:13px;color:var(--text);font-family:var(--sans);font-weight:500;margin-top:3px}
+.live{font-family:var(--mono);font-size:10px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--g);animation:p 2s infinite}
+@keyframes p{0%,100%{opacity:1}50%{opacity:.25}}
+.kpis{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:2px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;min-width:180px;flex:1;}
+.kl{font-size:10px;text-transform:uppercase;letter-spacing:1.8px;color:var(--muted);font-family:var(--sans);font-weight:500;margin-bottom:8px}
+.kv{font-family:var(--sans);font-size:28px;font-weight:700;line-height:1.1}
+.kv.gold{color:var(--gold)}.kv.g{color:var(--g)}.kv.r{color:var(--r)}
+
+/* ── MOBILE ── */
+@media(max-width:600px){
+  #top{ padding:8px 12px 8px; }
+  .hrow{ margin-bottom:6px; }
+  #top h1{ font-size:14px; }
+  #sync-label{ font-size:10px; margin-top:1px; }
+  .kpis{ gap:6px; flex-wrap:nowrap; }
+  .kpi{
+    padding:8px 10px;
+    min-width:0;
+    border-radius:8px;
+    flex:1;
+  }
+  .kl{ font-size:8px; letter-spacing:1px; margin-bottom:3px; }
+  .kv{ font-size:18px; }
+  #k-giorno{ font-size:11px !important; }
+  #kpm{ font-size:13px !important; }
+  .zoom-btn{ width:22px; height:22px; font-size:13px; }
+  #zoom-label{ font-size:9px; min-width:20px; }
+  #btn-order{ font-size:10px; padding:0 7px; }
+}
+
+/* CONTENT: fixed sotto #top, scroll su entrambi gli assi */
+#content{
+  position:fixed;
+  left:0;right:0;bottom:0;
+  top:0; /* aggiornato via JS dopo render */
+  overflow:auto;
+  padding:0 20px 24px;
+}
+
+/* TABELLA */
+table{border-collapse:collapse;font-family:var(--mono);font-size:var(--tbl-size);min-width:900px;width:100%}
+
+thead tr th{
+  background:var(--bbg);
+  color:var(--b);
+  font-weight:500;
+  font-size:var(--tbl-size);
+  padding:8px 9px;
+  border-right:1px solid var(--border);
+  border-bottom:1px solid var(--bb);
+}
+thead tr th:last-child{border-right:none}
+
+th,td{padding:5px 9px;text-align:right;white-space:nowrap;border-right:1px solid var(--border)}
+th:first-child,td:first-child{text-align:left;min-width:140px;position:sticky;left:0;z-index:2}
+tbody td:first-child{z-index:1}
+td:last-child{border-right:none}
+
+tr.yr td{background:#111827;color:var(--b);font-weight:600;font-size:calc(var(--tbl-size) + 2px);letter-spacing:2px;padding:8px 9px;border-top:2px solid var(--bb);text-align:center;cursor:pointer}
+tr.yr td:hover{background:#1a2744;color:#bfdbfe}
+tr.inc td:first-child{display:none}
+tr.pct td:first-child{display:none}
+thead tr th:first-child{display:none}
+tr.inc td{background:var(--bg);font-weight:500;font-size:var(--tbl-size);padding:6px 6px}
+tr.inc td:first-child{background:var(--bg);color:var(--g);font-size:calc(var(--tbl-size) - 2px);opacity:.8;padding:5px 9px}
+tr.inc td.hi{background:var(--bg);font-weight:700}
+tr.pct td{background:var(--bg);color:var(--muted);font-size:calc(var(--tbl-size) - 1px);padding:2px 6px}
+tr.pct td:first-child{background:var(--bg);font-size:calc(var(--tbl-size) - 2px);padding:2px 9px}
+tr.pct td.pos{background:var(--bg);color:#4ade80}
+tr.pct td.neg{background:var(--bg);color:#f87171}
+
+/* bottone cella mese */
+.btn-cell{
+  display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;width:100%;
+  background:var(--gbg);color:var(--gv);
+  border:1px solid #1a5c35;border-radius:8px;
+  padding:7px 6px;cursor:pointer;
+  font-family:var(--mono);font-size:var(--tbl-size);font-weight:500;
+  transition:background .15s,border-color .15s;
+  min-width:80px;
+}
+.btn-cell:hover{background:#0f3d22;border-color:#2d8a50}
+.btn-cell .cell-pct{font-size:calc(var(--tbl-size) - 4px);opacity:.85}
+.btn-cell .cell-pct.pos{color:#4ade80}
+.btn-cell .cell-pct.neg{color:#f87171}
+.btn-cell .cell-pct.muted{color:#a8a8a8}
+
+/* mese corrente — lampeggio */
+.btn-cell.current{
+  background:#14532d;border-color:#4ade80;color:#bbf7d0;
+  animation:blink-cell 1.4s ease-in-out infinite;
+}
+@keyframes blink-cell{
+  0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,0);border-color:#4ade80}
+  50%{box-shadow:0 0 8px 3px rgba(74,222,128,0.35);border-color:#86efac}
+}
+td.e{background:var(--bg);color:transparent}
+
+/* POPUP body usa stessa variabile */
+.drow{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:7px 18px;border-bottom:1px solid #1a1a1a;
+  font-family:var(--mono);font-size:var(--tbl-size);
+}
+.drow:last-child{border-bottom:none}
+.drow:hover{background:var(--surface)}
+.drow-left{display:flex;flex-direction:column;gap:2px}
+.drow-day{color:var(--muted);font-size:calc(var(--tbl-size) - 2px)}
+.drow-date{color:var(--text);font-size:var(--tbl-size)}
+.drow-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.drow-val{color:var(--gv);font-weight:600;font-size:var(--tbl-size)}
+.drow-delta{font-size:calc(var(--tbl-size) - 2px)}
+.drow-delta.pos{color:var(--g)}.drow-delta.neg{color:var(--r)}.drow-delta.zero{color:var(--muted)}
+  background:var(--surface);border:1px solid var(--border);color:var(--text);
+  width:26px;height:26px;border-radius:5px;cursor:pointer;
+  font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);
+}
+.zoom-btn:hover{background:#2a2a2a;border-color:#444}
+
+/* thead sticky top:0 dentro #content */
+thead{position:sticky;top:0;z-index:100}
+
+.status{text-align:center;padding:60px;font-family:var(--mono);color:var(--muted);font-size:13px}
+.status.err{color:var(--r)}
+.foot{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;padding-top:10px}
+
+/* POPUP */
+#overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center}
+#overlay.open{display:flex}
+#popup{
+  background:#141414;border:1px solid var(--border);border-radius:10px;
+  width:420px;max-width:95vw;max-height:80vh;
+  display:flex;flex-direction:column;
+  box-shadow:0 24px 60px rgba(0,0,0,.8);
+}
+#popup-head{
+  padding:16px 18px 12px;border-bottom:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:center;flex-shrink:0;
+}
+#popup-title{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--text)}
+#popup-sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px}
+#popup-close{
+  background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;
+  line-height:1;padding:2px 6px;border-radius:4px;
+}
+#popup-close:hover{background:var(--surface);color:var(--text)}
+#popup-body{overflow-y:auto;padding:8px 0;flex:1}
+#popup-loader{text-align:center;padding:40px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+
+/* POPUP RUOTA */
+#wheel-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9998;align-items:center;justify-content:center}
+#wheel-overlay.open{display:flex}
+
+/* popup grafico andamento anno */
+#wchart-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:10000;align-items:center;justify-content:center}
+#wchart-overlay.open{display:flex}
+#wchart-popup{
+  background:#0f0f0f;border:1px solid var(--border);border-radius:12px;
+  padding:20px;width:min(92vw,700px);
+  box-shadow:0 24px 80px rgba(0,0,0,.9);
+  position:relative;
+}
+#wchart-title{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--b);margin-bottom:14px;letter-spacing:2px}
+#wchart-canvas-wrap{height:320px;position:relative}
+#wchart-close{position:absolute;top:12px;right:14px;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:2px 6px;border-radius:4px}
+#wchart-close:hover{background:var(--surface);color:var(--text)}
+#wheel-popup{
+  background:#0f0f0f;border:1px solid var(--border);border-radius:16px;
+  padding:12px;
+  width:min(96vw, 96vh);
+  max-width:96vw;
+  max-height:96vh;
+  box-shadow:0 24px 80px rgba(0,0,0,.9);
+  position:relative;
+  display:flex;flex-direction:column;
+}
+#wheel-close{
+  position:absolute;top:12px;right:14px;
+  background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;
+  line-height:1;padding:2px 6px;border-radius:4px;
+}
+#wheel-close:hover{background:var(--surface);color:var(--text)}
+#wheel-title{font-family:var(--mono);font-size:16px;font-weight:600;color:var(--b);text-align:center;margin-bottom:12px;letter-spacing:2px}
+#wheel-svg-wrap{display:flex;justify-content:center;align-items:center;flex:1;min-height:0}
+#wheel-svg-wrap svg{width:100%;height:100%;max-width:100%;max-height:100%}
+#btn-chart{
+  background:var(--surface);border:1px solid var(--border);color:var(--b);
+  font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:5px;
+  cursor:pointer;white-space:nowrap;
+}
+#btn-chart:hover{background:#1e3a5f;border-color:var(--b)}
+#btn-chart.active{background:#1e3a5f;border-color:var(--b);color:#fff}
+#btn-pct{
+  background:var(--surface);border:1px solid var(--border);color:var(--b);
+  font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:5px;
+  cursor:pointer;white-space:nowrap;
+}
+#btn-pct:hover{background:#1e3a5f;border-color:var(--b)}
+#btn-pct.active{background:#1e3a5f;border-color:var(--b);color:#fff}
+
+/* area grafico */
+#chart-area{padding:16px 18px;flex-shrink:0}
+#chart-canvas{width:100%;height:220px;display:block}
+
+/* ── LOGIN ── */
+#login-screen{
+  display:none;position:fixed;inset:0;z-index:99999;
+  background:#0a0a0a;
+  align-items:center;justify-content:center;
+  flex-direction:column;
+}
+#login-screen.show{display:flex}
+#login-box{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:16px;padding:36px 32px;
+  width:min(400px,92vw);
+  display:flex;flex-direction:column;gap:0;
+}
+#login-box h2{
+  font-family:var(--mono);font-size:20px;font-weight:600;
+  color:var(--text);text-align:center;margin-bottom:6px;letter-spacing:1px;
+}
+#login-box p{
+  font-family:var(--sans);font-size:12px;color:var(--muted);
+  text-align:center;margin-bottom:28px;
+}
+.login-field{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.login-field label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted)}
+.login-field input{
+  background:#0f0f0f;border:1px solid var(--border);border-radius:8px;
+  padding:12px 14px;font-family:var(--mono);font-size:14px;color:var(--text);
+  outline:none;transition:border-color .15s;
+}
+.login-field input:focus{border-color:#4ade80}
+#login-btn{
+  margin-top:8px;width:100%;padding:13px;
+  background:#14532d;border:1px solid #4ade80;border-radius:8px;
+  color:#4ade80;font-family:var(--mono);font-size:14px;font-weight:600;
+  cursor:pointer;letter-spacing:1px;transition:background .15s;
+}
+#login-btn:hover{background:#166534}
+#login-err{
+  margin-top:12px;padding:10px 14px;border-radius:6px;
+  background:#1a0808;border:1px solid #f87171;
+  color:#f87171;font-family:var(--mono);font-size:12px;
+  text-align:center;display:none;
+}
+#logout-btn{
+  position:fixed;bottom:16px;right:16px;z-index:998;
+  background:var(--surface);border:1px solid var(--border);
+  color:var(--muted);font-family:var(--mono);font-size:10px;
+  padding:6px 12px;border-radius:6px;cursor:pointer;
+  display:none;
+}
+#logout-btn:hover{border-color:#f87171;color:#f87171}
+</style>
+</head>
+<body>
+
+<div id="wchart-overlay">
+  <div id="wchart-popup">
+    <button id="wchart-close" onclick="closeWheelChart()">×</button>
+    <div id="wchart-title">—</div>
+    <div id="wchart-canvas-wrap"><canvas id="wchart-canvas"></canvas></div>
+  </div>
+</div>
+
+<div id="wheel-overlay">
+  <div id="wheel-popup">
+    <button id="wheel-close" onclick="closeWheel()">×</button>
+    <div id="wheel-title">—</div>
+    <div id="wheel-svg-wrap"></div>
+  </div>
+</div>
+
+<div id="overlay">
+  <div id="popup">
+    <div id="popup-head">
+      <div>
+        <div id="popup-title">—</div>
+        <div id="popup-sub">—</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button id="btn-chart" onclick="toggleChart('delta')">📊 Delta €</button>
+        <button id="btn-pct" onclick="toggleChart('pct')">📈 % vs anno prec</button>
+        <button id="popup-close" onclick="closePopup()">×</button>
+      </div>
+    </div>
+    <div id="chart-area" style="display:none">
+      <canvas id="chart-canvas"></canvas>
+    </div>
+    <div id="popup-body">
+      <div id="popup-loader">Caricamento...</div>
+    </div>
+  </div>
+</div>
+
+<div id="top">
+  <div class="hrow">
+    <div>
+      <h1>REPORT CASSA</h1>
+      <div id="sync-label">caricamento...</div>
+    </div>
+    <div class="live"><div class="dot"></div>LIVE</div>
+  <div style="display:flex;gap:6px;align-items:center">
+    <button class="zoom-btn" onclick="zoom(-1)">−</button>
+    <span id="zoom-label" style="font-family:var(--mono);font-size:10px;color:var(--muted);min-width:28px;text-align:center">17</span>
+    <button class="zoom-btn" onclick="zoom(+1)">+</button>
+    <button class="zoom-btn" id="btn-order" onclick="toggleOrder()" style="width:auto;padding:0 10px;font-size:12px;margin-left:6px" title="Inverti ordine anni">↕ <span id="order-label">↑ recente</span></button>
+  </div>
+  </div>
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kl">Cassa oggi</div>
+      <div class="kv gold" id="kc">—</div>
+      <div style="margin-top:6px;font-family:var(--sans);font-size:20px;font-weight:600" id="kpm">—</div>
+    </div>
+    <div class="kpi">
+      <div class="kl">Mese corrente</div>
+      <div class="kv" id="km">—</div>
+      <div style="margin-top:6px;font-family:var(--sans);font-size:16px;font-weight:500;color:var(--text)" id="kg">—</div>
+    </div>
+    <div class="kpi">
+      <div class="kl">Variazione annuale</div>
+      <div class="kv" id="kpa">—</div>
+      <div style="margin-top:6px;font-family:var(--sans);font-size:13px;color:var(--muted)">Rispetto all'anno precedente</div>
+    </div>
+  </div>
+</div>
+
+<div id="content">
+  <div class="status" id="st">Connessione a Firebase...</div>
+  <table id="tbl" style="display:none">
+    <thead><tr id="mrow"></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div class="foot" id="foot"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const DB='https://report-cassa-default-rtdb.europe-west1.firebasedatabase.app';
+const ROOT='cassa';
+const MESI=['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+
+const fmt=v=>v==null?'':Math.round(v).toLocaleString('it-IT');
+const fmtP=v=>v==null?'—':(v>0?'+':'')+v.toFixed(2)+'%';
+function setPct(el,v){
+  el.textContent=fmtP(v);
+  el.className='kv'+(v==null?'':v>0?' g':v<0?' r':'');
+}
+
+function fixContentTop(){
+  const h=document.getElementById('top').offsetHeight;
+  document.getElementById('content').style.top=h+'px';
+}
+
+async function load(){
+  try{
+    const [dash,storico]=await Promise.all([
+      fetch(`${DB}/${ROOT}/dashboard.json`).then(r=>r.json()),
+      fetch(`${DB}/${ROOT}/storico.json`).then(r=>r.json())
+    ]);
+    if(!storico) throw new Error('Nessun dato');
+
+    if(dash){
+      document.getElementById('km').textContent=dash.mese_corrente_nome||'—';
+      document.getElementById('kg').textContent=
+        (dash.giorno_lavorativo&&dash.giorni_lav_totali)
+          ?`Giorno ${dash.giorno_lavorativo} di ${dash.giorni_lav_totali}`:'—';
+      document.getElementById('kc').textContent=
+        dash.cassa_oggi!=null?'€ '+fmt(dash.cassa_oggi):'—';
+      const ac=dash.anno_corrente;
+      const mc=String(dash.mese_corrente_num).padStart(2,'0');
+      const pMese = storico[ac]?.[mc]?.pct_vs_anno_prec??null;
+      const elPM = document.getElementById('kpm');
+      elPM.textContent = pMese==null ? '' : (pMese>0?'+':'')+pMese.toFixed(1)+'%';
+      elPM.style.color = pMese==null?'var(--muted)':pMese>0?'var(--g)':pMese<0?'var(--r)':'var(--muted)';
+      const elPA = document.getElementById('kpa');
+      setPct(elPA, dash.pct_anno??null);
+      document.getElementById('sync-label').textContent = dash.ultimo_sync
+        ? (s => {
+            // s formato: "2026_04_17 09:50:47"
+            const [datePart, timePart] = s.split(' ');
+            const [y,m,d] = datePart.split('_');
+            const hhmm = timePart ? timePart.slice(0,5) : '';
+            return `Aggiornato: ${d}-${m}-${y} ${hhmm}`;
+          })(dash.ultimo_sync)
+        : '';
+    }
+
+    // header mesi
+    document.getElementById('mrow').innerHTML=
+      '<th>Anno</th>'+
+      MESI.map((m,i)=>`<th>${m}<br><span style="font-size:9px;opacity:.35">${i+1}</span></th>`).join('');
+
+    // salva per re-render al cambio ordine
+    window._lastDash    = dash;
+    window._lastStorico = storico;
+    renderTable(dash, storico);
+
+  }catch(e){
+    const s=document.getElementById('st');
+    s.className='status err';s.textContent='Errore: '+e.message;
+    console.error(e);
+  }
+}
+
+// imposta top iniziale appena il DOM è pronto
+document.addEventListener('DOMContentLoaded', () => {
+  fixContentTop();
+  checkLogin();
+});
+window.addEventListener('resize', fixContentTop);
+
+// chiudi popup con Escape o click fuori
+document.getElementById('overlay').addEventListener('click', e=>{
+  if(e.target===document.getElementById('overlay')) closePopup();
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closePopup(); });
+
+let _chartData  = [];   // delta giornalieri €
+let _pctData    = [];   // % giornaliera vs anno prec
+let _chartInst  = null;
+let _chartMode  = null; // 'delta' | 'pct' | null
+
+function toggleChart(mode){
+  const area = document.getElementById('chart-area');
+  if(_chartMode === mode){
+    // stesso pulsante: chiudi
+    _chartMode = null;
+    area.style.display = 'none';
+    document.getElementById('btn-chart').classList.remove('active');
+    document.getElementById('btn-pct').classList.remove('active');
+    if(_chartInst){ _chartInst.destroy(); _chartInst=null; }
+  } else {
+    _chartMode = mode;
+    area.style.display = 'block';
+    document.getElementById('btn-chart').classList.toggle('active', mode==='delta');
+    document.getElementById('btn-pct').classList.toggle('active', mode==='pct');
+    if(mode==='delta' && _chartData.length) renderChart(_chartData, false);
+    if(mode==='pct'   && _pctData.length)   renderChart(_pctData,   true);
+  }
+}
+
+function renderChart(data, isPct){
+  const canvas = document.getElementById('chart-canvas');
+  if(_chartInst){ _chartInst.destroy(); _chartInst=null; }
+  const labels = data.map(d=>d.label);
+  const vals   = data.map(d=>d.val);
+  _chartInst = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets:[{
+        data: vals,
+        backgroundColor: vals.map(v => v >= 0 ? 'rgba(74,222,128,0.7)' : 'rgba(248,113,113,0.7)'),
+        borderColor:     vals.map(v => v >= 0 ? '#4ade80' : '#f87171'),
+        borderWidth: 1,
+        borderRadius: 3,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#1a1a1a',borderColor:'#2a2a2a',borderWidth:1,
+          titleColor:'#93c5fd',bodyColor:'#86efac',
+          titleFont:{family:'IBM Plex Mono',size:11},
+          bodyFont:{family:'IBM Plex Mono',size:12},
+          callbacks:{
+            label: ctx => isPct
+              ? (ctx.parsed.y>=0?'+':'')+ctx.parsed.y.toFixed(2)+'%'
+              : (ctx.parsed.y>=0?'+':'')+'€ '+Math.round(ctx.parsed.y).toLocaleString('it-IT')
+          }
+        }
+      },
+      scales:{
+        x:{ticks:{color:'#a8a8a8',font:{family:'IBM Plex Mono',size:10},maxRotation:45,autoSkip:true,maxTicksLimit:10},grid:{color:'#1e1e1e'}},
+        y:{
+          ticks:{
+            color:'#a8a8a8',font:{family:'IBM Plex Mono',size:10},
+            callback: v => isPct ? (v>=0?'+':'')+v.toFixed(1)+'%' : (v>=0?'+':'')+Math.round(v/1000)+'k'
+          },
+          grid:{color:'#1e1e1e'}
+        }
+      }
+    }
+  });
+}
+
+function closeWheelChart(){
+  document.getElementById('wchart-overlay').classList.remove('open');
+  if(window._wchartInst){ window._wchartInst.destroy(); window._wchartInst=null; }
+}
+document.getElementById('wchart-overlay').addEventListener('click', e=>{
+  if(e.target===document.getElementById('wchart-overlay')) closeWheelChart();
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeWheelChart(); closeWheel(); } });
+
+async function openWheelChart(anno){
+  const storico      = window._lastStorico;
+  if(!storico || !storico[anno]) return;
+
+  const mesi_data    = storico[anno];
+  const mesi_prec    = storico[String(parseInt(anno)-1)] || {};
+  const annoCorrente = window._lastDash?.anno_corrente;
+  const meseCorrente = window._lastDash?.mese_corrente_num;
+  const giornoOggi   = window._lastDash?.giorno_lavorativo || 0;
+  const giorniTot    = window._lastDash?.giorni_lav_totali || 1;
+
+  const MESI_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+  const labels=[], vals=[];
+  let cumulo_c=0, cumulo_p=0;
+
+  for(let m=1; m<=12; m++){
+    const ms    = String(m).padStart(2,'0');
+    const inc   = mesi_data[ms]?.incasso_totale ?? mesi_data[ms]?.valore_attuale?.incasso ?? 0;
+    const inc_p = mesi_prec[ms]?.incasso_totale ?? mesi_prec[ms]?.valore_attuale?.incasso ?? 0;
+    if(inc === 0) break;
+    const isCur = (anno == annoCorrente && m == meseCorrente);
+    cumulo_c += inc;
+    if(isCur && giornoOggi > 0 && giorniTot > 0){
+      cumulo_p += (inc_p / giorniTot) * giornoOggi;
+    } else {
+      cumulo_p += inc_p;
+    }
+    if(cumulo_p > 0){
+      labels.push(MESI_SHORT[m-1]);
+      vals.push(parseFloat(((cumulo_c - cumulo_p) / cumulo_p * 100).toFixed(2)));
+    }
+  }
+
+  document.getElementById('wchart-title').textContent = 'Andamento % annuale — ' + anno;
+  document.getElementById('wchart-overlay').classList.add('open');
+  if(window._wchartInst){ window._wchartInst.destroy(); window._wchartInst=null; }
+
+  const canvas = document.getElementById('wchart-canvas');
+  window._wchartInst = new Chart(canvas, {
+    type: 'line',
+    data:{
+      labels,
+      datasets:[{
+        data: vals,
+        borderColor: '#4ade80',
+        backgroundColor: 'rgba(74,222,128,0.08)',
+        borderWidth: 2.5,
+        pointRadius: 5,
+        pointBackgroundColor: vals.map(v => v>=0 ? '#4ade80' : '#f87171'),
+        pointBorderColor:     vals.map(v => v>=0 ? '#4ade80' : '#f87171'),
+        pointHoverRadius: 7,
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#1a1a1a',borderColor:'#2a2a2a',borderWidth:1,
+          titleColor:'#93c5fd',bodyColor:'#86efac',
+          titleFont:{family:'IBM Plex Mono',size:11},
+          bodyFont:{family:'IBM Plex Mono',size:13},
+          callbacks:{
+            label: ctx => (ctx.parsed.y>=0?'+':'')+ctx.parsed.y.toFixed(2)+'% vs anno prec'
+          }
+        }
+      },
+      scales:{
+        x:{ ticks:{color:'#a8a8a8',font:{family:'IBM Plex Mono',size:12}}, grid:{color:'#1e1e1e'} },
+        y:{
+          ticks:{ color:'#a8a8a8',font:{family:'IBM Plex Mono',size:12}, callback: v => (v>=0?'+':'')+v.toFixed(1)+'%' },
+          grid:{color:'#1e1e1e'}
+        }
+      }
+    }
+  });
+}
+
+function closeWheel(){
+  document.getElementById('wheel-overlay').classList.remove('open');
+}
+
+document.getElementById('wheel-overlay').addEventListener('click', e=>{
+  if(e.target===document.getElementById('wheel-overlay')) closeWheel();
+});
+
+function openWheel(anno){
+  const storico = window._lastStorico;
+  const dash    = window._lastDash;
+  if(!storico || !storico[anno]) return;
+  const mesi_data = storico[anno];
+  const mesi_prec = storico[String(parseInt(anno)-1)] || {};
+  document.getElementById('wheel-title').textContent = anno;
+  document.getElementById('wheel-overlay').classList.add('open');
+  const COLORS=['#6ea8d8','#5bb8a0','#e8a045','#e87b45','#d45b5b','#c45ba0','#8b5bd4','#5b8bd4','#45a8b8','#7ab845','#d4b845','#d47845'];
+  const MESI_N=['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  const cx=240,cy=240,R_out=200,R_mid=130,R_in=70;
+
+  // mese e giorni correnti dalla dashboard
+  const annoCorrente = dash?.anno_corrente;
+  const meseCorrente = dash?.mese_corrente_num;
+  const giornoOggi   = dash?.giorno_lavorativo  || 0;
+  const giorniTot    = dash?.giorni_lav_totali   || 1;
+
+  const slices=[]; let totale=0,totale_prec=0;
+  for(let m=1;m<=12;m++){
+    const ms=String(m).padStart(2,'0');
+    const inc  = mesi_data[ms]?.incasso_totale ?? mesi_data[ms]?.valore_attuale?.incasso ?? 0;
+    const inc_p= mesi_prec[ms]?.incasso_totale ?? mesi_prec[ms]?.valore_attuale?.incasso ?? 0;
+
+    let pct=null;
+    const isMeseCorrente = (anno==annoCorrente && m==meseCorrente);
+
+    if(inc>0 && inc_p>0){
+      if(isMeseCorrente && giornoOggi>0 && giorniTot>0){
+        // mese in corso: proporziona anno precedente ai giorni lavorativi
+        const inc_p_prop = (inc_p / giorniTot) * giornoOggi;
+        pct = parseFloat(((inc - inc_p_prop) / inc_p_prop * 100).toFixed(2));
+      } else {
+        pct = parseFloat(((inc - inc_p) / inc_p * 100).toFixed(2));
+      }
+    }
+    // se inc==0 (mese futuro): pct rimane null, mostrera solo —
+
+    slices.push({nome:MESI_N[m-1],inc,pct,color:COLORS[m-1],futuro:(inc==0)});
+
+    // per totale anno: somma solo mesi con dati
+    if(inc>0){
+      totale += inc;
+      if(isMeseCorrente && giornoOggi>0 && giorniTot>0){
+        totale_prec += (inc_p / giorniTot) * giornoOggi;
+      } else {
+        totale_prec += inc_p;
+      }
+    }
+  }
+
+  const pctAnno=totale_prec>0?parseFloat(((totale-totale_prec)/totale_prec*100).toFixed(2)):null;
+  const step=2*Math.PI/12,start=-Math.PI/2;
+  function xy(r,a){return{x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)};}
+  function arc(r1,r2,a0,a1){
+    const s1=xy(r1,a0),e1=xy(r1,a1),s2=xy(r2,a0),e2=xy(r2,a1),lg=a1-a0>Math.PI?1:0;
+    return 'M'+s1.x+' '+s1.y+'A'+r1+' '+r1+' 0 '+lg+' 1 '+e1.x+' '+e1.y+'L'+e2.x+' '+e2.y+'A'+r2+' '+r2+' 0 '+lg+' 0 '+s2.x+' '+s2.y+'Z';
+  }
+  let sv='<svg viewBox="0 0 480 480" style="width:100%;height:100%;display:block">';
+  sv+='<circle cx="'+cx+'" cy="'+cy+'" r="'+(R_out+8)+'" fill="#111827"/>';
+  sv+='<circle cx="'+cx+'" cy="'+cy+'" r="'+(R_in-2)+'" fill="#0a1628"/>';
+  slices.forEach(function(sl,i){
+    const a0=start+i*step,a1=a0+step-0.02,am=a0+step/2;
+    const opacity=sl.futuro?'0.3':'0.85';
+    sv+='<path d="'+arc(R_out,R_mid+2,a0,a1)+'" fill="'+sl.color+'" opacity="'+opacity+'"/>';
+    sv+='<path d="'+arc(R_mid,R_in+2,a0,a1)+'" fill="'+sl.color+'22" stroke="'+sl.color+'" stroke-width="0.5" opacity="'+(sl.futuro?'0.3':'1')+'"/>';
+    const tn=xy((R_out+R_mid)/2,am),rd=(am*180/Math.PI)+90;
+    sv+='<text x="'+tn.x+'" y="'+tn.y+'" text-anchor="middle" dominant-baseline="central" font-family="IBM Plex Sans,sans-serif" font-size="11" font-weight="600" fill="'+(sl.futuro?'#666':'#fff')+'" transform="rotate('+rd+','+tn.x+','+tn.y+')">'+sl.nome+'</text>';
+    const ti=xy((R_mid+R_in)/2,am);
+    const incStr=sl.inc>0?Math.round(sl.inc).toLocaleString('it-IT'):'\u2014';
+    const fs=incStr.length>7?9:incStr.length>5?10:12;
+    const pStr=sl.pct!=null?(sl.pct>0?'+':'')+sl.pct.toFixed(1)+'%':'';
+    const pc=sl.pct==null?'#555':sl.pct>0?'#4ade80':'#f87171';
+    sv+='<text x="'+ti.x+'" y="'+(ti.y-7)+'" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="'+fs+'" font-weight="700" fill="'+(sl.futuro?'#333':'#e8e8e8')+'">'+incStr+'</text>';
+    sv+='<text x="'+ti.x+'" y="'+(ti.y+9)+'" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9" fill="'+pc+'">'+pStr+'</text>';
+  });
+  const totStr='\u20ac '+Math.round(totale).toLocaleString('it-IT');
+  const pStr2=pctAnno!=null?(pctAnno>0?'+':'')+pctAnno.toFixed(2)+'%':'';
+  const pc2=pctAnno==null?'#888':pctAnno>0?'#4ade80':'#f87171';
+  const tfs=totStr.length>14?10:totStr.length>12?11:13;
+  sv+='<circle cx="'+cx+'" cy="'+cy+'" r="'+(R_in-2)+'" fill="transparent" style="cursor:pointer" onclick="openWheelChart(\x27'+anno+'\x27)" />';
+  sv+='<text x="'+cx+'" y="'+(cy-22)+'" text-anchor="middle" font-family="IBM Plex Sans,sans-serif" font-size="13" font-weight="600" fill="#93c5fd" letter-spacing="2" style="pointer-events:none">ANNO</text>';
+  sv+='<text x="'+cx+'" y="'+(cy+4)+'" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="'+tfs+'" font-weight="700" fill="#f59e0b" style="pointer-events:none">'+totStr+'</text>';
+  sv+='<text x="'+cx+'" y="'+(cy+26)+'" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="14" font-weight="700" fill="'+pc2+'" style="pointer-events:none">'+pStr2+'</text>';
+  sv+='</svg>';
+  document.getElementById('wheel-svg-wrap').innerHTML=sv;
+}
+
+function closePopup(){
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('chart-area').style.display='none';
+  document.getElementById('btn-chart').classList.remove('active');
+  document.getElementById('btn-pct').classList.remove('active');
+  _chartMode=null;
+  _chartData=[];
+  _pctData=[];
+  if(_chartInst){ _chartInst.destroy(); _chartInst=null; }
+}
+
+const GIORNI_IT=['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+const MESI_IT=['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+               'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+
+async function openPopup(anno, mese, titolo){
+  document.getElementById('popup-title').textContent = titolo;
+  document.getElementById('popup-sub').textContent   = 'Andamento giornaliero';
+  document.getElementById('popup-body').innerHTML    = '<div id="popup-loader">Caricamento...</div>';
+  document.getElementById('overlay').classList.add('open');
+
+  try{
+    const giorni = await fetch(`${DB}/${ROOT}/storico/${anno}/${mese}/giorni.json`).then(r=>r.json());
+
+    if(!giorni){ 
+      document.getElementById('popup-body').innerHTML=
+        '<div id="popup-loader">Nessun dato disponibile</div>'; 
+      return; 
+    }
+
+    // ordina le chiavi (formato YYYY_MM_DD)
+    const keys = Object.keys(giorni).sort();
+    let prev = 0;
+    let html = '';
+    let totale_finale = 0;
+    _chartData = [];
+    _pctData   = [];
+
+    // leggi incasso totale mese anno precedente per calcolo %
+    const annoPrec = String(parseInt(anno)-1);
+    const mesePrec = await fetch(`${DB}/${ROOT}/storico/${annoPrec}/${mese}/incasso_totale.json`).then(r=>r.json()).catch(()=>null);
+    const giorniTotPrec = window._lastDash?.giorni_lav_totali || 21; // fallback
+
+    for(const k of keys){
+      const g = giorni[k];
+      const val = Math.round(g.incasso||0);
+      const parts = k.split('_');
+      const dateObj = new Date(+parts[0], +parts[1]-1, +parts[2]);
+      const nomeGiorno = GIORNI_IT[dateObj.getDay()];
+      const dataFmt = `${String(parts[2]).padStart(2,'0')}/${String(parts[1]).padStart(2,'0')}`;
+      const delta = val - prev;
+      const deltaFmt = (delta>=0?'+':'')+fmt(delta);
+      const deltaCls = delta>0?'pos':delta<0?'neg':'zero';
+
+      // delta giornaliero €
+      _chartData.push({ label: dataFmt, val: delta });
+
+      // % giornaliera vs anno precedente
+      // usa il giorno lavorativo reale salvato nel record, cappato a giorniTotPrec
+      const giornoLav = Math.min(g.giorno_lav || _chartData.length, giorniTotPrec);
+      if(mesePrec && mesePrec > 0 && giorniTotPrec > 0){
+        const benchmarkPrec = (mesePrec / giorniTotPrec) * giornoLav;
+        const pctGiorno = benchmarkPrec > 0
+          ? parseFloat(((val - benchmarkPrec) / benchmarkPrec * 100).toFixed(2))
+          : null;
+        _pctData.push({ label: dataFmt, val: pctGiorno ?? 0 });
+      }
+
+      html+=`
+        <div class="drow">
+          <div class="drow-left">
+            <div class="drow-day">${nomeGiorno}.</div>
+            <div class="drow-date">${dataFmt}/${parts[0]}</div>
+          </div>
+          <div class="drow-right">
+            <div class="drow-val">€ ${fmt(val)}</div>
+            <div class="drow-delta ${deltaCls}">${deltaFmt}</div>
+          </div>
+        </div>`;
+      prev = val;
+      totale_finale = val;
+    }
+
+    document.getElementById('popup-sub').textContent =
+      `${keys.length} aggiornamenti — finale: € ${fmt(totale_finale)}`;
+    document.getElementById('popup-body').innerHTML = html;
+
+  }catch(e){
+    document.getElementById('popup-body').innerHTML=
+      `<div id="popup-loader" style="color:#f87171">Errore: ${e.message}</div>`;
+  }
+}
+
+
+// ── AUTENTICAZIONE ──────────────────────────────────────────────────────────
+const TOKEN_KEY = 'rc_auth_token';
+
+function getStoredToken(){
+  try{ return localStorage.getItem(TOKEN_KEY); }catch(e){ return null; }
+}
+function setStoredToken(t){
+  try{ localStorage.setItem(TOKEN_KEY, t); }catch(e){}
+}
+function clearStoredToken(){
+  try{ localStorage.removeItem(TOKEN_KEY); }catch(e){}
+}
+
+async function checkLogin(){
+  const token = getStoredToken();
+  if(token){
+    // verifica token ancora valido su Firebase
+    const ok = await verifyToken(token);
+    if(ok){ showApp(); return; }
+    clearStoredToken();
+  }
+  showLogin();
+}
+
+async function verifyToken(token){
+  try{
+    const r = await fetch(DB+'/auth/tokens/'+token+'.json');
+    const d = await r.json();
+    return d && d.valid === true;
+  }catch(e){ return false; }
+}
+
+async function doLogin(){
+  const user = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value.trim();
+  const err  = document.getElementById('login-err');
+  err.style.display='none';
+
+  if(!user || !pass){ err.textContent='Inserisci utente e password'; err.style.display='block'; return; }
+
+  try{
+    // Legge le credenziali da Firebase /auth/users/{user}
+    const r = await fetch(DB+'/auth/users/'+encodeURIComponent(user)+'.json');
+    const d = await r.json();
+    if(!d || d.password !== pass){
+      err.textContent='Credenziali non valide'; err.style.display='block'; return;
+    }
+    // Crea token semplice (user+timestamp)
+    const token = btoa(user+':'+Date.now());
+    // Salva token su Firebase
+    await fetch(DB+'/auth/tokens/'+token+'.json', {
+      method:'PUT', body:JSON.stringify({valid:true, user, created: new Date().toISOString()})
+    });
+    setStoredToken(token);
+    showApp();
+  }catch(e){
+    err.textContent='Errore di connessione: '+e.message; err.style.display='block';
+  }
+}
+
+function showLogin(){
+  document.getElementById('login-screen').classList.add('show');
+  document.getElementById('logout-btn').style.display='none';
+  // premendo Enter nel campo password fa login
+  document.getElementById('login-pass').onkeydown = e => { if(e.key==='Enter') doLogin(); };
+  document.getElementById('login-user').onkeydown = e => { if(e.key==='Enter') document.getElementById('login-pass').focus(); };
+}
+
+function showApp(){
+  document.getElementById('login-screen').classList.remove('show');
+  document.getElementById('logout-btn').style.display='block';
+  load(); // carica i dati
+  setInterval(load, 60000);
+}
+
+function doLogout(){
+  const token = getStoredToken();
+  if(token){
+    // invalida token su Firebase
+    fetch(DB+'/auth/tokens/'+token+'.json', {
+      method:'PUT', body:JSON.stringify({valid:false})
+    });
+  }
+  clearStoredToken();
+  showLogin();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
+
+// zoom tabella
+let tblSize = 17;
+let _orderDesc = true;   // true = 2026 in cima, false = 2026 in fondo
+
+function toggleOrder(){
+  _orderDesc = !_orderDesc;
+  document.getElementById('order-label').textContent = _orderDesc ? '↑ recente' : '↓ vecchio';
+  // ricarica la tabella con nuovo ordine
+  if(window._lastStorico && window._lastDash) renderTable(window._lastDash, window._lastStorico);
+}
+
+function renderTable(dash, storico){
+  const ac=dash?.anno_corrente, mn=dash?.mese_corrente_num;
+  let html='';
+  for(const anno of Object.keys(storico).sort((a,b)=> _orderDesc ? b-a : a-b)){
+    const mesi=storico[anno]; if(!mesi) continue;
+    html+=`<tr class="yr" onclick="openWheel('${anno}')"><td colspan="13">${anno}</td></tr>`;
+    html+='<tr class="inc"><td></td>';
+    for(let m=1;m<=12;m++){
+      const ms=String(m).padStart(2,'0');
+      const v=mesi[ms]?.incasso_totale??mesi[ms]?.valore_attuale?.incasso;
+      const p=mesi[ms]?.pct_vs_anno_prec;
+      const isCur=(anno==ac&&m==mn);
+      if(v!=null){
+        const pctHtml = p!=null
+          ? `<span class="cell-pct ${p>0?'pos':p<0?'neg':'muted'}">${p>0?'+':''}${p.toFixed(1)}%</span>`
+          : '';
+        html+=`<td style="padding:4px 5px">
+          <button class="btn-cell${isCur?' current':''}" onclick="openPopup('${anno}','${ms}','${MESI[m-1]} ${anno}')">
+            <span>${fmt(v)}</span>${pctHtml}
+          </button></td>`;
+      } else {
+        html+='<td class="e"></td>';
+      }
+    }
+    html+='</tr>';
+  }
+  document.getElementById('tbody').innerHTML=html;
+  document.getElementById('st').style.display='none';
+  document.getElementById('tbl').style.display='table';
+  document.getElementById('foot').textContent='Aggiornato: '+new Date().toLocaleTimeString('it-IT');
+  requestAnimationFrame(()=>{
+    fixContentTop();
+    // scrolla in fondo solo al primo caricamento E solo se 2026 è in basso
+    if(!window._firstLoaded){
+      if(!_orderDesc) document.getElementById('content').scrollTop = 999999;
+      window._firstLoaded = true;
+    }
+  });
+}
+
+function zoom(dir){
+  tblSize = Math.min(20, Math.max(8, tblSize + dir));
+  document.documentElement.style.setProperty('--tbl-size', tblSize+'px');
+  document.getElementById('zoom-label').textContent = tblSize;
+}
+</script>
+</body>
+</html>
