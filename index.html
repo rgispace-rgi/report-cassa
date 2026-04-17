@@ -293,6 +293,24 @@ thead{position:sticky;top:0;z-index:100}
 </head>
 <body>
 
+<div id="login-screen">
+  <div id="login-box">
+    <h2>REPORT CASSA</h2>
+    <p>Inserisci le tue credenziali per accedere</p>
+    <div class="login-field">
+      <label>Utente</label>
+      <input type="text" id="login-user" placeholder="username" autocomplete="username"/>
+    </div>
+    <div class="login-field">
+      <label>Password</label>
+      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"/>
+    </div>
+    <button id="login-btn" onclick="doLogin()">ACCEDI</button>
+    <div id="login-err">Credenziali non valide</div>
+  </div>
+</div>
+<button id="logout-btn" onclick="doLogout()">Esci</button>
+
 <div id="wchart-overlay">
   <div id="wchart-popup">
     <button id="wchart-close" onclick="closeWheelChart()">×</button>
