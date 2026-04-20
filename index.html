@@ -392,6 +392,30 @@ thead{position:sticky;top:0;z-index:100}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyD2ssOXHIvma4SkM2HSOk4ZNjRhY33piuM",
+    authDomain: "report-cassa.firebaseapp.com",
+    databaseURL: "https://report-cassa-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "report-cassa",
+    storageBucket: "report-cassa.firebasestorage.app",
+    messagingSenderId: "416990158828",
+    appId: "1:416990158828:web:cc5e4e47bb34acf5e1eac9"
+  };
+
+  const app  = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+
+  // Espone le funzioni al resto dello script
+  window.fbAuth = auth;
+  window.fbSignIn  = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
+  window.fbSignOut = () => signOut(auth);
+  window.fbOnAuth  = cb => onAuthStateChanged(auth, cb);
+</script>
 <script>
 const DB='https://report-cassa-default-rtdb.europe-west1.firebasedatabase.app';
 const ROOT='cassa';
@@ -412,8 +436,8 @@ function fixContentTop(){
 async function load(){
   try{
     const [dash,storico]=await Promise.all([
-      fetch(`${DB}/${ROOT}/dashboard.json`).then(r=>r.json()),
-      fetch(`${DB}/${ROOT}/storico.json`).then(r=>r.json())
+      fetchAuth(`${DB}/${ROOT}/dashboard.json`),
+      fetchAuth(`${DB}/${ROOT}/storico.json`)
     ]);
     if(!storico) throw new Error('Nessun dato');
 
@@ -751,7 +775,7 @@ async function openPopup(anno, mese, titolo){
   document.getElementById('overlay').classList.add('open');
 
   try{
-    const giorni = await fetch(`${DB}/${ROOT}/storico/${anno}/${mese}/giorni.json`).then(r=>r.json());
+    const giorni = await fetchAuth(`${DB}/${ROOT}/storico/${anno}/${mese}/giorni.json`);
 
     if(!giorni){ 
       document.getElementById('popup-body').innerHTML=
@@ -769,7 +793,7 @@ async function openPopup(anno, mese, titolo){
 
     // leggi incasso totale mese anno precedente per calcolo %
     const annoPrec = String(parseInt(anno)-1);
-    const mesePrec = await fetch(`${DB}/${ROOT}/storico/${annoPrec}/${mese}/incasso_totale.json`).then(r=>r.json()).catch(()=>null);
+    const mesePrec = await fetchAuth(`${DB}/${ROOT}/storico/${annoPrec}/${mese}/incasso_totale.json`).catch(()=>null);
     const giorniTotPrec = window._lastDash?.giorni_lav_totali || 21; // fallback
 
     for(const k of keys){
@@ -823,93 +847,101 @@ async function openPopup(anno, mese, titolo){
 }
 
 
-// ── AUTENTICAZIONE ──────────────────────────────────────────────────────────
-const TOKEN_KEY = 'rc_auth_token';
+// ── AUTENTICAZIONE FIREBASE ────────────────────────────────────────────────
+// Username -> email interna. Gli utenti digitano solo username,
+// noi lo trasformiamo in email@loftacassa.local per Firebase Auth.
+const EMAIL_DOMAIN = '@loftacassa.local';
+let _loggedIn = false;
+let _loadInterval = null;
 
-function getStoredToken(){
-  try{ return localStorage.getItem(TOKEN_KEY); }catch(e){ return null; }
-}
-function setStoredToken(t){
-  try{ localStorage.setItem(TOKEN_KEY, t); }catch(e){}
-}
-function clearStoredToken(){
-  try{ localStorage.removeItem(TOKEN_KEY); }catch(e){}
+// Attende che Firebase Auth sia pronto (viene caricato in modulo separato)
+function waitForFirebase(){
+  return new Promise(resolve => {
+    const check = () => {
+      if(window.fbOnAuth) resolve();
+      else setTimeout(check, 50);
+    };
+    check();
+  });
 }
 
 async function checkLogin(){
-  const token = getStoredToken();
-  if(token){
-    // verifica token ancora valido su Firebase
-    const ok = await verifyToken(token);
-    if(ok){ showApp(); return; }
-    clearStoredToken();
-  }
-  showLogin();
-}
-
-async function verifyToken(token){
-  try{
-    const r = await fetch(DB+'/auth/tokens/'+token+'.json');
-    const d = await r.json();
-    return d && d.valid === true;
-  }catch(e){ return false; }
+  await waitForFirebase();
+  // onAuthStateChanged scatta automaticamente al refresh della pagina
+  // Firebase ricorda la sessione (persistence LOCAL di default)
+  window.fbOnAuth(user => {
+    if(user){
+      if(!_loggedIn){
+        _loggedIn = true;
+        showApp();
+      }
+    } else {
+      _loggedIn = false;
+      showLogin();
+    }
+  });
 }
 
 async function doLogin(){
-  const user = document.getElementById('login-user').value.trim();
-  const pass = document.getElementById('login-pass').value.trim();
+  const user = document.getElementById('login-user').value.trim().toLowerCase();
+  const pass = document.getElementById('login-pass').value;
   const err  = document.getElementById('login-err');
   err.style.display='none';
 
-  if(!user || !pass){ err.textContent='Inserisci utente e password'; err.style.display='block'; return; }
+  if(!user || !pass){
+    err.textContent='Inserisci utente e password';
+    err.style.display='block'; return;
+  }
+
+  const email = user + EMAIL_DOMAIN;
 
   try{
-    // Legge le credenziali da Firebase /auth/users/{user}
-    const r = await fetch(DB+'/auth/users/'+encodeURIComponent(user)+'.json');
-    const d = await r.json();
-    if(!d || d.password !== pass){
-      err.textContent='Credenziali non valide'; err.style.display='block'; return;
-    }
-    // Crea token semplice (user+timestamp)
-    const token = btoa(user+':'+Date.now());
-    // Salva token su Firebase
-    await fetch(DB+'/auth/tokens/'+token+'.json', {
-      method:'PUT', body:JSON.stringify({valid:true, user, created: new Date().toISOString()})
-    });
-    setStoredToken(token);
-    showApp();
+    await window.fbSignIn(email, pass);
+    // showApp() verrà chiamato automaticamente da onAuthStateChanged
   }catch(e){
-    err.textContent='Errore di connessione: '+e.message; err.style.display='block';
+    let msg = 'Credenziali non valide';
+    if(e.code === 'auth/network-request-failed') msg = 'Errore di rete';
+    else if(e.code === 'auth/too-many-requests') msg = 'Troppi tentativi, riprova dopo';
+    err.textContent = msg;
+    err.style.display='block';
   }
 }
 
 function showLogin(){
-  document.getElementById('login-screen').classList.add('show');
-  document.getElementById('logout-btn').style.display='none';
-  // premendo Enter nel campo password fa login
-  document.getElementById('login-pass').onkeydown = e => { if(e.key==='Enter') doLogin(); };
-  document.getElementById('login-user').onkeydown = e => { if(e.key==='Enter') document.getElementById('login-pass').focus(); };
+  const s = document.getElementById('login-screen');
+  if(s) s.classList.add('show');
+  const lb = document.getElementById('logout-btn');
+  if(lb) lb.style.display='none';
+  // ferma auto-refresh se attivo
+  if(_loadInterval){ clearInterval(_loadInterval); _loadInterval = null; }
+  // Enter sul campo password fa login
+  const p = document.getElementById('login-pass');
+  const u = document.getElementById('login-user');
+  if(p) p.onkeydown = e => { if(e.key==='Enter') doLogin(); };
+  if(u) u.onkeydown = e => { if(e.key==='Enter') p.focus(); };
 }
 
 function showApp(){
-  document.getElementById('login-screen').classList.remove('show');
-  document.getElementById('logout-btn').style.display='block';
-  load(); // carica i dati
-  setInterval(load, 60000);
+  const s = document.getElementById('login-screen');
+  if(s) s.classList.remove('show');
+  const lb = document.getElementById('logout-btn');
+  if(lb) lb.style.display='block';
+  load();
+  if(!_loadInterval) _loadInterval = setInterval(load, 60000);
 }
 
-function doLogout(){
-  const token = getStoredToken();
-  if(token){
-    // invalida token su Firebase
-    fetch(DB+'/auth/tokens/'+token+'.json', {
-      method:'PUT', body:JSON.stringify({valid:false})
-    });
-  }
-  clearStoredToken();
-  showLogin();
+async function doLogout(){
+  try{ await window.fbSignOut(); }catch(e){}
+  location.reload();
 }
 
+// Fetch Firebase con token di autenticazione
+async function fetchAuth(path){
+  if(!window.fbAuth || !window.fbAuth.currentUser) throw new Error('Non autenticato');
+  const token = await window.fbAuth.currentUser.getIdToken();
+  const r = await fetch(path + (path.includes('?')?'&':'?') + 'auth=' + token);
+  return r.json();
+}
 // ────────────────────────────────────────────────────────────────────────────
 
 
