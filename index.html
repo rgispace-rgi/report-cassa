@@ -336,10 +336,99 @@ thead{position:sticky;top:0;z-index:100}
   padding:6px 12px;border-radius:6px;cursor:pointer;
   display:none;
 }
+#wchart-canvas-wrap svg{}
 #logout-btn:hover{border-color:#f87171;color:#f87171}
+
+/* Welcome popup mobile */
+#welcome-overlay{
+  display:none;position:fixed;inset:0;z-index:9997;
+  background:linear-gradient(160deg,#0a0a0a 0%,#111827 100%);
+  align-items:center;justify-content:center;
+  animation:wfadein .25s ease-out;
+}
+#welcome-overlay.show{display:flex}
+@keyframes wfadein{from{opacity:0}to{opacity:1}}
+#welcome-box{
+  width:100%;max-width:420px;padding:28px 24px;
+  display:flex;flex-direction:column;gap:18px;
+  text-align:center;
+}
+#welcome-close{
+  position:absolute;top:14px;right:16px;
+  background:var(--surface);border:1px solid var(--border);color:var(--muted);
+  font-size:22px;cursor:pointer;padding:4px 14px;border-radius:6px;
+  font-family:var(--mono);
+}
+#welcome-close:hover{color:var(--text);border-color:var(--r)}
+
+#welcome-when{
+  font-family:var(--sans);font-size:13px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:2px;font-weight:500;
+}
+#welcome-date{
+  font-family:var(--mono);font-size:17px;color:var(--text);
+  font-weight:500;margin-top:2px;
+}
+
+.wstat{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:14px;padding:18px 20px;text-align:left;
+}
+.wstat-lbl{
+  font-family:var(--sans);font-size:11px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:1.5px;font-weight:500;
+  margin-bottom:6px;
+}
+.wstat-val{
+  font-family:var(--sans);font-size:28px;font-weight:700;color:var(--text);
+  line-height:1.1;
+}
+.wstat-val.gold{color:var(--gold)}
+.wstat-val.g{color:var(--g)}
+.wstat-val.r{color:var(--r)}
+.wstat-sub{
+  font-family:var(--sans);font-size:14px;color:var(--muted);
+  margin-top:4px;
+}
+.wstat-sub.g{color:var(--g);font-weight:600}
+.wstat-sub.r{color:var(--r);font-weight:600}
+
+#welcome-entra{
+  background:#14532d;border:1px solid #4ade80;border-radius:10px;
+  color:#4ade80;font-family:var(--mono);font-size:13px;font-weight:600;
+  padding:12px 24px;cursor:pointer;letter-spacing:1.5px;
+  margin-top:4px;transition:background .15s;
+}
+#welcome-entra:hover{background:#166534}
 </style>
 </head>
 <body>
+
+<div id="welcome-overlay">
+  <button id="welcome-close" onclick="closeWelcome()">×</button>
+  <div id="welcome-box">
+    <div>
+      <div id="welcome-when">ULTIMO AGGIORNAMENTO</div>
+      <div id="welcome-date">—</div>
+    </div>
+    <div class="wstat">
+      <div class="wstat-lbl">Cassa oggi</div>
+      <div class="wstat-val gold" id="w-cassa">—</div>
+      <div class="wstat-sub" id="w-pmese">—</div>
+    </div>
+    <div class="wstat">
+      <div class="wstat-lbl">Mese corrente</div>
+      <div class="wstat-val" id="w-mese">—</div>
+      <div class="wstat-sub" id="w-giorno">—</div>
+    </div>
+    <div class="wstat">
+      <div class="wstat-lbl">Variazione annuale</div>
+      <div class="wstat-val" id="w-panno">—</div>
+      <div class="wstat-sub">Rispetto all'anno precedente</div>
+    </div>
+    <button id="welcome-entra" onclick="closeWelcome()">VAI ALLA DASHBOARD →</button>
+  </div>
+</div>
 
 <div id="login-screen">
   <div id="login-box">
@@ -489,6 +578,67 @@ function fixContentTop(){
   document.getElementById('content').style.top=h+'px';
 }
 
+function showWelcome(dash, storico){
+  if(!dash) return;
+  const overlay = document.getElementById('welcome-overlay');
+  if(!overlay) return;
+
+  // Etichetta temporale: Oggi / Ieri / Lunedì / Martedì ...
+  const GIORNI_FULL = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+  const MESI_FULL   = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
+                       'luglio','agosto','settembre','ottobre','novembre','dicembre'];
+
+  let labelWhen = 'ULTIMO AGGIORNAMENTO';
+  let labelDate = '';
+  if(dash.ultimo_sync){
+    // "2026_04_17 09:50:47"
+    const [dp, tp] = dash.ultimo_sync.split(' ');
+    const [y,m,d]  = dp.split('_').map(Number);
+    const hhmm     = tp ? tp.slice(0,5) : '';
+    const syncDate = new Date(y, m-1, d);
+    const today    = new Date();
+    today.setHours(0,0,0,0);
+    const diffDays = Math.floor((today - syncDate) / 86400000);
+
+    let parola;
+    if(diffDays === 0)      parola = 'Oggi';
+    else if(diffDays === 1) parola = 'Ieri';
+    else if(diffDays < 7)   parola = GIORNI_FULL[syncDate.getDay()];
+    else                    parola = `${d} ${MESI_FULL[m-1]} ${y}`;
+
+    labelWhen = 'ULTIMO AGGIORNAMENTO — ' + parola.toUpperCase();
+    labelDate = `${String(d).padStart(2,'0')}-${String(m).padStart(2,'0')}-${y}  ${hhmm}`;
+  }
+  document.getElementById('welcome-when').textContent = labelWhen;
+  document.getElementById('welcome-date').textContent = labelDate;
+
+  // Stats
+  document.getElementById('w-cassa').textContent =
+    dash.cassa_oggi != null ? '€ '+fmt(dash.cassa_oggi) : '—';
+  document.getElementById('w-mese').textContent = dash.mese_corrente_nome || '—';
+  document.getElementById('w-giorno').textContent =
+    (dash.giorno_lavorativo && dash.giorni_lav_totali)
+      ? `Giorno ${dash.giorno_lavorativo} di ${dash.giorni_lav_totali}` : '—';
+
+  const ac = dash.anno_corrente;
+  const mc = String(dash.mese_corrente_num).padStart(2,'0');
+  const pMese = storico?.[ac]?.[mc]?.pct_vs_anno_prec ?? null;
+  const wpm = document.getElementById('w-pmese');
+  wpm.textContent = pMese==null ? '' : (pMese>0?'+':'')+pMese.toFixed(2)+'%';
+  wpm.className = 'wstat-sub ' + (pMese>0?'g':pMese<0?'r':'');
+
+  const pa = dash.pct_anno;
+  const wpa = document.getElementById('w-panno');
+  wpa.textContent = pa==null ? '—' : (pa>0?'+':'')+pa.toFixed(2)+'%';
+  wpa.className = 'wstat-val ' + (pa>0?'g':pa<0?'r':'');
+
+  overlay.classList.add('show');
+}
+
+function closeWelcome(){
+  document.getElementById('welcome-overlay').classList.remove('show');
+}
+
 async function load(){
   try{
     const [dash,storico]=await Promise.all([
@@ -532,6 +682,12 @@ async function load(){
     window._lastDash    = dash;
     window._lastStorico = storico;
     renderTable(dash, storico);
+
+    // Mostra welcome popup su mobile al primo caricamento dopo login
+    if(!window._welcomeShown){
+      window._welcomeShown = true;
+      if(window.innerWidth <= 700) showWelcome(dash, storico);
+    }
 
   }catch(e){
     const s=document.getElementById('st');
