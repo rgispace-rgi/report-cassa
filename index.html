@@ -200,6 +200,29 @@ thead{position:sticky;top:0;z-index:100}
 #wchart-canvas-wrap{height:320px;position:relative}
 #wchart-close{position:absolute;top:12px;right:14px;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:2px 6px;border-radius:4px}
 #wchart-close:hover{background:var(--surface);color:var(--text)}
+.wchart-tab{
+  background:var(--surface);border:1px solid var(--border);color:var(--b);
+  font-family:var(--mono);font-size:12px;padding:6px 12px;border-radius:6px;
+  cursor:pointer;white-space:nowrap;transition:all .15s;
+}
+.wchart-tab:hover{background:#1e3a5f;border-color:var(--b)}
+.wchart-tab.active{background:#1e3a5f;border-color:var(--b);color:#fff}
+
+/* frecce navigazione anno */
+.wchart-nav{
+  position:absolute;top:50%;transform:translateY(-50%);
+  background:rgba(30,58,95,.7);border:1px solid var(--bb);
+  color:var(--b);font-family:var(--mono);font-size:20px;font-weight:700;
+  width:40px;height:40px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;z-index:10;
+  transition:all .15s;
+}
+.wchart-nav:hover{background:rgba(59,130,246,.9);color:#fff;border-color:var(--b)}
+.wchart-nav:disabled{opacity:.2;cursor:not-allowed}
+.wchart-nav.prev{left:6px}
+.wchart-nav.next{right:6px}
+#wchart-popup{position:relative}
 #wheel-popup{
   background:#0f0f0f;border:1px solid var(--border);border-radius:16px;
   padding:12px;
@@ -314,7 +337,13 @@ thead{position:sticky;top:0;z-index:100}
 <div id="wchart-overlay">
   <div id="wchart-popup">
     <button id="wchart-close" onclick="closeWheelChart()">×</button>
+    <button class="wchart-nav prev" id="wchart-prev" onclick="navWheelChart(-1)">‹</button>
+    <button class="wchart-nav next" id="wchart-next" onclick="navWheelChart(+1)">›</button>
     <div id="wchart-title">—</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <button id="wchart-btn-pct" class="wchart-tab active" onclick="switchWheelChart('pct')">📈 % vs anno prec</button>
+      <button id="wchart-btn-inc" class="wchart-tab" onclick="switchWheelChart('inc')">💰 Incassi mensili</button>
+    </div>
     <div id="wchart-canvas-wrap"><canvas id="wchart-canvas"></canvas></div>
   </div>
 </div>
@@ -328,7 +357,9 @@ thead{position:sticky;top:0;z-index:100}
 </div>
 
 <div id="overlay">
-  <div id="popup">
+  <div id="popup" style="position:relative">
+    <button class="wchart-nav prev" id="popup-prev" onclick="navPopup(-1)">‹</button>
+    <button class="wchart-nav next" id="popup-next" onclick="navPopup(+1)">›</button>
     <div id="popup-head">
       <div>
         <div id="popup-title">—</div>
@@ -577,8 +608,50 @@ document.getElementById('wchart-overlay').addEventListener('click', e=>{
 });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeWheelChart(); closeWheel(); } });
 
+let _wchartAnno = null;
+let _wchartMode = 'pct';
+
+function switchWheelChart(mode){
+  _wchartMode = mode;
+  document.getElementById('wchart-btn-pct').classList.toggle('active', mode==='pct');
+  document.getElementById('wchart-btn-inc').classList.toggle('active', mode==='inc');
+  renderWheelChart();
+}
+
 async function openWheelChart(anno){
+  _wchartAnno = anno;
+  _wchartMode = 'pct';
+  document.getElementById('wchart-btn-pct').classList.add('active');
+  document.getElementById('wchart-btn-inc').classList.remove('active');
+  document.getElementById('wchart-overlay').classList.add('open');
+  renderWheelChart();
+  updateWheelNav();
+}
+
+function updateWheelNav(){
+  const storico = window._lastStorico;
+  if(!storico) return;
+  const anni = Object.keys(storico).sort();
+  const idx = anni.indexOf(_wchartAnno);
+  document.getElementById('wchart-prev').disabled = (idx <= 0);
+  document.getElementById('wchart-next').disabled = (idx >= anni.length - 1);
+}
+
+function navWheelChart(dir){
+  const storico = window._lastStorico;
+  if(!storico) return;
+  const anni = Object.keys(storico).sort();
+  const idx = anni.indexOf(_wchartAnno);
+  const newIdx = idx + dir;
+  if(newIdx < 0 || newIdx >= anni.length) return;
+  _wchartAnno = anni[newIdx];
+  renderWheelChart();
+  updateWheelNav();
+}
+
+function renderWheelChart(){
   const storico      = window._lastStorico;
+  const anno         = _wchartAnno;
   if(!storico || !storico[anno]) return;
 
   const mesi_data    = storico[anno];
@@ -589,7 +662,7 @@ async function openWheelChart(anno){
   const giorniTot    = window._lastDash?.giorni_lav_totali || 1;
 
   const MESI_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-  const labels=[], vals=[];
+  const labels=[], vals=[], valsPrec=[];
   let cumulo_c=0, cumulo_p=0;
 
   for(let m=1; m<=12; m++){
@@ -604,57 +677,142 @@ async function openWheelChart(anno){
     } else {
       cumulo_p += inc_p;
     }
-    if(cumulo_p > 0){
-      labels.push(MESI_SHORT[m-1]);
-      vals.push(parseFloat(((cumulo_c - cumulo_p) / cumulo_p * 100).toFixed(2)));
+    labels.push(MESI_SHORT[m-1]);
+    // Per il grafico incassi: mese corrente dell'anno prec va proporzionato
+    // al giorno lavorativo oggi per un confronto equo
+    if(isCur && giornoOggi > 0 && giorniTot > 0){
+      valsPrec.push(Math.round((inc_p / giorniTot) * giornoOggi));
+    } else {
+      valsPrec.push(Math.round(inc_p));
+    }
+    if(_wchartMode === 'pct'){
+      if(cumulo_p > 0){
+        vals.push(parseFloat(((cumulo_c - cumulo_p) / cumulo_p * 100).toFixed(2)));
+      } else {
+        vals.push(0);
+      }
+    } else {
+      vals.push(Math.round(inc));
     }
   }
 
-  document.getElementById('wchart-title').textContent = 'Andamento % annuale — ' + anno;
-  document.getElementById('wchart-overlay').classList.add('open');
-  if(window._wchartInst){ window._wchartInst.destroy(); window._wchartInst=null; }
+  const titolo = _wchartMode === 'pct'
+    ? 'Andamento % annuale — ' + anno
+    : 'Incassi mensili — ' + anno;
+  document.getElementById('wchart-title').textContent = titolo;
 
+  if(window._wchartInst){ window._wchartInst.destroy(); window._wchartInst=null; }
   const canvas = document.getElementById('wchart-canvas');
-  window._wchartInst = new Chart(canvas, {
-    type: 'line',
-    data:{
-      labels,
-      datasets:[{
-        data: vals,
-        borderColor: '#4ade80',
-        backgroundColor: 'rgba(74,222,128,0.08)',
-        borderWidth: 2.5,
-        pointRadius: 5,
-        pointBackgroundColor: vals.map(v => v>=0 ? '#4ade80' : '#f87171'),
-        pointBorderColor:     vals.map(v => v>=0 ? '#4ade80' : '#f87171'),
-        pointHoverRadius: 7,
-        fill: true,
-        tension: 0.3
-      }]
-    },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      plugins:{
-        legend:{display:false},
-        tooltip:{
-          backgroundColor:'#1a1a1a',borderColor:'#2a2a2a',borderWidth:1,
-          titleColor:'#93c5fd',bodyColor:'#86efac',
-          titleFont:{family:'IBM Plex Mono',size:11},
-          bodyFont:{family:'IBM Plex Mono',size:13},
-          callbacks:{
-            label: ctx => (ctx.parsed.y>=0?'+':'')+ctx.parsed.y.toFixed(2)+'% vs anno prec'
+
+  if(_wchartMode === 'pct'){
+    // Grafico linea percentuale
+    window._wchartInst = new Chart(canvas, {
+      type: 'line',
+      data:{
+        labels,
+        datasets:[{
+          data: vals,
+          borderColor: '#4ade80',
+          backgroundColor: 'rgba(74,222,128,0.08)',
+          borderWidth: 2.5,
+          pointRadius: 5,
+          pointBackgroundColor: vals.map(v => v>=0 ? '#4ade80' : '#f87171'),
+          pointBorderColor:     vals.map(v => v>=0 ? '#4ade80' : '#f87171'),
+          pointHoverRadius: 7,
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{
+            backgroundColor:'#1a1a1a',borderColor:'#2a2a2a',borderWidth:1,
+            titleColor:'#93c5fd',bodyColor:'#86efac',
+            titleFont:{family:'IBM Plex Mono',size:11},
+            bodyFont:{family:'IBM Plex Mono',size:13},
+            callbacks:{
+              label: ctx => (ctx.parsed.y>=0?'+':'')+ctx.parsed.y.toFixed(2)+'% vs anno prec'
+            }
+          }
+        },
+        scales:{
+          x:{ ticks:{color:'#a8a8a8',font:{family:'IBM Plex Mono',size:12}}, grid:{color:'#1e1e1e'} },
+          y:{
+            ticks:{ color:'#a8a8a8',font:{family:'IBM Plex Mono',size:12}, callback: v => (v>=0?'+':'')+v.toFixed(1)+'%' },
+            grid:{color:'#1e1e1e'}
           }
         }
+      }
+    });
+  } else {
+    // Grafico linee incassi - doppio dataset (anno corrente vs precedente)
+    const annoPrec = String(parseInt(anno)-1);
+    window._wchartInst = new Chart(canvas, {
+      type: 'line',
+      data:{
+        labels,
+        datasets:[
+          {
+            label: annoPrec,
+            data: valsPrec,
+            borderColor: '#93c5fd',
+            backgroundColor: 'rgba(147,197,253,0.05)',
+            borderWidth: 2,
+            pointRadius: 4,
+            pointBackgroundColor: '#93c5fd',
+            pointBorderColor: '#93c5fd',
+            pointHoverRadius: 6,
+            fill: false,
+            tension: 0.3
+          },
+          {
+            label: anno,
+            data: vals,
+            borderColor: '#4ade80',
+            backgroundColor: 'rgba(74,222,128,0.08)',
+            borderWidth: 2.5,
+            pointRadius: 5,
+            pointBackgroundColor: '#4ade80',
+            pointBorderColor: '#4ade80',
+            pointHoverRadius: 7,
+            fill: true,
+            tension: 0.3
+          }
+        ]
       },
-      scales:{
-        x:{ ticks:{color:'#a8a8a8',font:{family:'IBM Plex Mono',size:12}}, grid:{color:'#1e1e1e'} },
-        y:{
-          ticks:{ color:'#a8a8a8',font:{family:'IBM Plex Mono',size:12}, callback: v => (v>=0?'+':'')+v.toFixed(1)+'%' },
-          grid:{color:'#1e1e1e'}
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{
+            display:true,
+            position:'top',
+            labels:{color:'#e8e8e8',font:{family:'IBM Plex Mono',size:11},boxWidth:12,padding:12,usePointStyle:true}
+          },
+          tooltip:{
+            backgroundColor:'#1a1a1a',borderColor:'#2a2a2a',borderWidth:1,
+            titleColor:'#93c5fd',bodyColor:'#86efac',
+            titleFont:{family:'IBM Plex Mono',size:11},
+            bodyFont:{family:'IBM Plex Mono',size:13},
+            callbacks:{
+              label: ctx => ctx.dataset.label + ': € ' + Math.round(ctx.parsed.y).toLocaleString('it-IT')
+            }
+          }
+        },
+        scales:{
+          x:{ ticks:{color:'#a8a8a8',font:{family:'IBM Plex Mono',size:12}}, grid:{color:'#1e1e1e'} },
+          y:{
+            ticks:{
+              color:'#a8a8a8',font:{family:'IBM Plex Mono',size:11},
+              callback: v => '€'+Math.round(v/1000)+'k'
+            },
+            grid:{color:'#1e1e1e'}
+          }
         }
       }
-    }
-  });
+    });
+  }
 }
 
 function closeWheel(){
@@ -768,7 +926,49 @@ const GIORNI_IT=['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
 const MESI_IT=['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
                'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 
+function updatePopupNav(){
+  const storico = window._lastStorico;
+  const anno = window._popupAnno;
+  const mese = window._popupMese;
+  if(!storico || !anno || !mese){
+    document.getElementById('popup-prev').disabled = true;
+    document.getElementById('popup-next').disabled = true;
+    return;
+  }
+  const items = [];
+  for(const a of Object.keys(storico).sort()){
+    const mesi = storico[a];
+    if(!mesi) continue;
+    for(let m=1; m<=12; m++){
+      const ms = String(m).padStart(2,'0');
+      const v = mesi[ms]?.incasso_totale ?? mesi[ms]?.valore_attuale?.incasso;
+      if(v != null) items.push({a, m: ms});
+    }
+  }
+  const idx = items.findIndex(x => x.a == anno && x.m == mese);
+  document.getElementById('popup-prev').disabled = (idx <= 0);
+  document.getElementById('popup-next').disabled = (idx < 0 || idx >= items.length - 1);
+  window._popupItems = items;
+  window._popupIdx = idx;
+}
+
+function navPopup(dir){
+  const items = window._popupItems;
+  const idx = window._popupIdx;
+  if(!items || idx < 0) return;
+  const newIdx = idx + dir;
+  if(newIdx < 0 || newIdx >= items.length) return;
+  const next = items[newIdx];
+  const MESI_N = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+  const titolo = MESI_N[parseInt(next.m)-1] + ' ' + next.a;
+  closePopup();
+  setTimeout(() => openPopup(next.a, next.m, titolo), 50);
+}
+
 async function openPopup(anno, mese, titolo){
+  window._popupAnno = anno;
+  window._popupMese = mese;
+  updatePopupNav();
   document.getElementById('popup-title').textContent = titolo;
   document.getElementById('popup-sub').textContent   = 'Andamento giornaliero';
   document.getElementById('popup-body').innerHTML    = '<div id="popup-loader">Caricamento...</div>';
