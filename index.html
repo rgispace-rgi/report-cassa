@@ -201,10 +201,10 @@ thead{position:sticky;top:0;z-index:100}
 #popup-title{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--text)}
 #popup-sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px}
 #popup-close{
-  background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;
-  line-height:1;padding:2px 6px;border-radius:4px;
+  background:none;border:1px solid transparent;color:var(--r);font-size:20px;font-weight:700;cursor:pointer;
+  line-height:1;padding:2px 8px;border-radius:6px;
 }
-#popup-close:hover{background:var(--surface);color:var(--text)}
+#popup-close:hover{background:rgba(248,113,113,.15);border-color:var(--r)}
 #popup-body{overflow-y:auto;padding:8px 0;flex:1}
 #popup-loader{text-align:center;padding:40px;font-family:var(--mono);font-size:12px;color:var(--muted)}
 
@@ -223,8 +223,8 @@ thead{position:sticky;top:0;z-index:100}
 }
 #wchart-title{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--b);margin-bottom:14px;letter-spacing:2px}
 #wchart-canvas-wrap{height:320px;position:relative}
-#wchart-close{position:absolute;top:12px;right:14px;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:2px 6px;border-radius:4px}
-#wchart-close:hover{background:var(--surface);color:var(--text)}
+#wchart-close{position:absolute;top:12px;right:14px;background:none;border:1px solid transparent;color:var(--r);font-size:22px;font-weight:700;cursor:pointer;padding:2px 8px;border-radius:6px;z-index:20}
+#wchart-close:hover{background:rgba(248,113,113,.15);border-color:var(--r)}
 .wchart-tab{
   background:var(--surface);border:1px solid var(--border);color:var(--b);
   font-family:var(--mono);font-size:12px;padding:6px 12px;border-radius:6px;
@@ -259,11 +259,11 @@ thead{position:sticky;top:0;z-index:100}
   display:flex;flex-direction:column;
 }
 #wheel-close{
-  position:absolute;top:12px;right:14px;
-  background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;
-  line-height:1;padding:2px 6px;border-radius:4px;
+  position:absolute;top:12px;right:14px;z-index:20;
+  background:none;border:1px solid transparent;color:var(--r);font-size:22px;font-weight:700;cursor:pointer;
+  line-height:1;padding:2px 8px;border-radius:6px;
 }
-#wheel-close:hover{background:var(--surface);color:var(--text)}
+#wheel-close:hover{background:rgba(248,113,113,.15);border-color:var(--r)}
 #wheel-title{font-family:var(--mono);font-size:16px;font-weight:600;color:var(--b);text-align:center;margin-bottom:12px;letter-spacing:2px}
 #wheel-svg-wrap{display:flex;justify-content:center;align-items:center;flex:1;min-height:0}
 #wheel-svg-wrap svg{width:100%;height:100%;max-width:100%;max-height:100%}
@@ -354,12 +354,12 @@ thead{position:sticky;top:0;z-index:100}
   text-align:center;
 }
 #welcome-close{
-  position:absolute;top:14px;right:16px;
-  background:var(--surface);border:1px solid var(--border);color:var(--muted);
-  font-size:22px;cursor:pointer;padding:4px 14px;border-radius:6px;
+  position:absolute;top:14px;right:16px;z-index:20;
+  background:var(--surface);border:1px solid var(--border);color:var(--r);
+  font-size:22px;font-weight:700;cursor:pointer;padding:4px 14px;border-radius:6px;
   font-family:var(--mono);
 }
-#welcome-close:hover{color:var(--text);border-color:var(--r)}
+#welcome-close:hover{background:rgba(248,113,113,.15);border-color:var(--r)}
 
 #welcome-when{
   font-family:var(--sans);font-size:13px;color:var(--muted);
