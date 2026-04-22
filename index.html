@@ -99,19 +99,22 @@ tr.yr td .anno-label{display:inline-block}
   tr.yr td{
     padding:0;
     height:36px;
-    position:sticky !important;
-    left:0;
+    position:relative;
     overflow:visible;
-    /* il td copre tutta la larghezza; lo span dentro si posiziona al centro della viewport */
   }
   tr.yr td .anno-label{
-    position:sticky;
-    left:50vw;
-    transform:translateX(-50%);
     display:inline-block;
-    padding:8px 16px;
+    padding:6px 14px;
     background:#111827;
+    border:1px solid var(--bb);
     border-radius:6px;
+    position:absolute;
+    top:4px;
+    /* left impostato da JS in base allo scroll orizzontale */
+    left:0;
+    will-change:left;
+    pointer-events:none;
+    z-index:3;
   }
 }
 tr.inc td:first-child{display:none}
@@ -1214,7 +1217,29 @@ function renderTable(dash, storico){
     if(!window._firstLoaded){
       if(!_orderDesc) document.getElementById('content').scrollTop = 999999;
       window._firstLoaded = true;
+      // aggancia scroll listener per label anno (mobile)
+      const content = document.getElementById('content');
+      content.addEventListener('scroll', updateAnnoLabels, {passive:true});
+      window.addEventListener('resize', updateAnnoLabels);
     }
+    updateAnnoLabels();
+  });
+}
+
+function updateAnnoLabels(){
+  // solo su mobile
+  if(window.innerWidth > 700) return;
+  const content = document.getElementById('content');
+  if(!content) return;
+  const scrollLeft = content.scrollLeft;
+  const viewportW  = content.clientWidth;
+  // posizione desiderata: centro della viewport nel sistema di coordinate della tabella
+  const labels = document.querySelectorAll('.anno-label');
+  labels.forEach(el => {
+    // larghezza label per centrarla
+    const w = el.offsetWidth;
+    const centerX = scrollLeft + viewportW / 2 - w / 2;
+    el.style.left = Math.max(8, centerX) + 'px';
   });
 }
 
