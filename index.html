@@ -90,8 +90,30 @@ th:first-child,td:first-child{text-align:left;min-width:140px;position:sticky;le
 tbody td:first-child{z-index:1}
 td:last-child{border-right:none}
 
-tr.yr td{background:#111827;color:var(--b);font-weight:600;font-size:calc(var(--tbl-size) + 2px);letter-spacing:2px;padding:8px 9px;border-top:2px solid var(--bb);text-align:center;cursor:pointer}
+tr.yr td{background:#111827;color:var(--b);font-weight:600;font-size:calc(var(--tbl-size) + 2px);letter-spacing:2px;padding:8px 9px;border-top:2px solid var(--bb);text-align:center;cursor:pointer;position:relative}
 tr.yr td:hover{background:#1a2744;color:#bfdbfe}
+tr.yr td .anno-label{display:inline-block}
+
+/* su mobile l'anno resta centrato rispetto alla viewport mentre scorri */
+@media(max-width:700px){
+  tr.yr td{
+    padding:0;
+    height:36px;
+    position:sticky !important;
+    left:0;
+    overflow:visible;
+    /* il td copre tutta la larghezza; lo span dentro si posiziona al centro della viewport */
+  }
+  tr.yr td .anno-label{
+    position:sticky;
+    left:50vw;
+    transform:translateX(-50%);
+    display:inline-block;
+    padding:8px 16px;
+    background:#111827;
+    border-radius:6px;
+  }
+}
 tr.inc td:first-child{display:none}
 tr.pct td:first-child{display:none}
 thead tr th:first-child{display:none}
@@ -1161,7 +1183,7 @@ function renderTable(dash, storico){
   let html='';
   for(const anno of Object.keys(storico).sort((a,b)=> _orderDesc ? b-a : a-b)){
     const mesi=storico[anno]; if(!mesi) continue;
-    html+=`<tr class="yr" onclick="openWheel('${anno}')"><td colspan="13">${anno}</td></tr>`;
+    html+=`<tr class="yr" onclick="openWheel('${anno}')"><td colspan="13"><span class="anno-label">${anno}</span></td></tr>`;
     html+='<tr class="inc"><td></td>';
     for(let m=1;m<=12;m++){
       const ms=String(m).padStart(2,'0');
